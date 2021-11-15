@@ -1,6 +1,7 @@
 use crate::api;
 use crate::types;
 
+use std::env;
 use std::net::TcpStream;
 //use std::{thread, time};
 use serde::de;
@@ -12,7 +13,8 @@ use tungstenite::stream::MaybeTlsStream;
 use tungstenite::{connect, Message, WebSocket};
 use url::Url;
 
-type GatewayWebSocket = WebSocket<MaybeTlsStream<TcpStream>>;
+// This is a type alias for the type of web socket that we'll be opening
+pub type GatewayWebSocket = WebSocket<MaybeTlsStream<TcpStream>>;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 /// Sending generic messages to the gateway websocket
@@ -29,13 +31,11 @@ pub trait SendableGatewayMessage {
     fn send(&self, websocket: &mut GatewayWebSocket) -> ()
     where
         Self: Serialize,
-        Self: std::fmt::Debug,
     {
         let message = RawSendableGatewayMessage {
             op: self.opcode(),
             d: self,
         };
-        println!("Sending message: {:#?}", message);
         let formatted_payload = Message::Text(serde_json::to_string(&message).unwrap());
         websocket.write_message(formatted_payload).unwrap();
 
@@ -44,23 +44,45 @@ pub trait SendableGatewayMessage {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-/// Receiving generic messages from the gateway websocket
+/// Messages that we can force receive from the gateway. These messages are received in
+/// a particular order while we're initializing our connection with the gateway.
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 #[derive(Debug, Deserialize)]
-struct RawReceivableGatewayMessage<T> {
-    op: i32,
-    d: T,
+struct PrivateGatewayEvent<T> {
+    pub op: i64,
+    pub s: Option<i64>,
+    pub t: Option<String>,
+    pub d: T,
 }
 
-pub trait ReceivableMessage<T: std::fmt::Debug + de::DeserializeOwned> {
-    fn from_websocket(ws: &mut GatewayWebSocket) -> T {
+trait ForceRetrievableGatewayMessage<T: std::fmt::Debug + de::DeserializeOwned> {
+    fn force_from_websocket(ws: &mut GatewayWebSocket) -> T {
         let raw_message = ws.read_message().unwrap().to_string();
-        let parsed_message: RawReceivableGatewayMessage<T> =
+        let parsed_message: PrivateGatewayEvent<T> =
             serde_json::from_str(&raw_message).unwrap();
         println!("Received message from gateway: {:#?}", parsed_message);
         return parsed_message.d;
     }
 }
+
+#[derive(Deserialize, Debug)]
+pub struct Hello {
+    pub heartbeat_interval: i64,
+}
+
+impl ForceRetrievableGatewayMessage<Hello> for Hello {}
+
+#[derive(Deserialize, Debug)]
+pub struct Ready {
+    #[serde(rename(deserialize = "v"))]
+    pub version: i32,
+    pub user: types::User,
+    pub session_id: String,
+    pub application: types::Application,
+    pub guilds: Vec<types::UnavailableGuild>,
+}
+
+impl ForceRetrievableGatewayMessage<Ready> for Ready {}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 /// Sending the IDENTIFY message to the gateway
@@ -90,9 +112,9 @@ impl Identify {
             token: config.token,
             intents: config.intents,
             properties: ConnectionProperties {
-                os: "test".to_string(),
-                browser: "test".to_string(),
-                device: "test".to_string(),
+                os: env::consts::OS.to_string(),
+                browser: "discord-rs".to_string(),
+                device: "discord-rs".to_string(),
             },
         }
     }
@@ -105,34 +127,10 @@ impl SendableGatewayMessage for Identify {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-/// Receiving the HELLO message from the gateway
-////////////////////////////////////////////////////////////////////////////////////////////////////
-#[derive(Deserialize, Debug)]
-struct Hello {
-    heartbeat_interval: u32,
-}
-
-impl ReceivableMessage<Hello> for Hello {}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-/// Receiving the READY message from the gateway
-////////////////////////////////////////////////////////////////////////////////////////////////////
-#[derive(Deserialize, Debug)]
-struct Ready {
-    #[serde(rename(deserialize = "v"))]
-    version: i32,
-    user: types::User,
-    session_id: String,
-    application: types::Application,
-}
-
-impl ReceivableMessage<Ready> for Ready {}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
 /// Heartbeats to and from the gateway
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 #[derive(Debug, Serialize)]
-struct Heartbeat {
+pub struct Heartbeat {
     d: i64,
 }
 impl SendableGatewayMessage for Heartbeat {
@@ -142,7 +140,7 @@ impl SendableGatewayMessage for Heartbeat {
 }
 
 impl Heartbeat {
-    fn from_atom(sequence_num: &atomic::AtomicI64) -> Self {
+    pub fn from_atom(sequence_num: &atomic::AtomicI64) -> Self {
         Heartbeat {
             d: sequence_num.load(atomic::Ordering::Relaxed),
         }
@@ -150,43 +148,85 @@ impl Heartbeat {
 }
 
 #[derive(Debug, Deserialize)]
-struct HeartbeatAck {}
-impl ReceivableMessage<HeartbeatAck> for HeartbeatAck {}
+#[serde(deny_unknown_fields)]
+pub struct HeartbeatAck {}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+/// The different types of messages that should be expected from the user.
+////////////////////////////////////////////////////////////////////////////////////////////////////
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub enum GatewayMessageData {
+    Hello(Hello),
+    HeartbeatAck(HeartbeatAck),
+}
+
+#[derive(Debug, Deserialize)]
+pub struct GatewayEvent {
+    #[serde(rename(deserialize = "op"))]
+    pub opcode: i64,
+
+    #[serde(rename(deserialize = "s"))]
+    pub sequence_number: Option<i64>,
+
+    #[serde(rename(deserialize = "t"))]
+    pub dispatch_type: Option<String>,
+
+    #[serde(rename(deserialize = "d"))]
+    pub data: GatewayMessageData,
+}
+
+impl GatewayEvent {
+    pub fn from_websocket(ws: &mut GatewayWebSocket) -> Option<Self> {
+        let raw_message = ws.read_message().unwrap().to_string();
+        let parsed_message = serde_json::from_str(&raw_message);
+        match parsed_message {
+            Ok(r) => return Some(r),
+            _ => {
+                println!("Error deserializing gateway message: {:#?}", parsed_message);
+                return None;
+            }
+        };
+    }
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 /// Establishing a connection to the gateway
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+pub struct GatewayConnection {
+    pub websocket: GatewayWebSocket,
+    pub sequence_number: atomic::AtomicI64,
+    pub heartbeat_interval: atomic::AtomicI64,
+}
+
 pub fn connect_to_gateway(
     bot_config: api::config::BotConfig,
     gateway_config: api::GatewayBotResponse,
-) -> () {
-    let (mut ws, _response) =
-        connect(Url::parse(&gateway_config.url).unwrap()).expect("Can't connect");
+) -> Option<GatewayConnection> {
+    // Create the initial connection to the websocket
+    let gateway_url = Url::parse(&gateway_config.url).expect("Could not parse gatweay URL");
+    let (mut ws, _response) = connect(gateway_url).expect("Can't connect");
 
-    // After initially connecting to the gateway, we should expect to receive a HELLO message from
-    // the gateway that tells us what our heartbeat interval will be.
-    let hello_message = Hello::from_websocket(&mut ws);
-    println!("Hello: #{:?}", &hello_message);
-
-    // Once we receive that, we'll send an IDENTITY message to the gateway, providing information
-    // about ourselves.
+    // Once we've actually connected, we'll expect a series of events from the gateway in
+    // succession to correctly establish the connection. To do this, we'll force receive those
+    // events from the websocket. The order of operations, as specificed in the developer
+    // documentation is:
+    //
+    // 1. We should expect a HELLO message from the gateway, which will inform us of the interval
+    //    at which our client is expected to send heartbeats.
+    // 2. We should then send an IDENTIFY message to the gateway, providing our intent, shard, and
+    //    connection properties information.
+    // 3. Assuming the IDENTIFY message is valid, we should expect to receive a READY message, at
+    //    which point we are considered 'connected' to the gateway.
+    let heartbeat_interval = atomic::AtomicI64::new(0);
+    let hello_message = Hello::force_from_websocket(&mut ws);
+    heartbeat_interval.store(hello_message.heartbeat_interval, atomic::Ordering::Relaxed);
     Identify::from_config(bot_config).send(&mut ws);
+    Ready::force_from_websocket(&mut ws);
 
-    // After sending the identify, we should expect to receive the READY message, which will give
-    // us additional information about our connection session.
-    let ready_message = Ready::from_websocket(&mut ws);
-    println!("READY: #{:?}", &ready_message);
-
-    // And now we need to start a background thread that will send heartbeat messages. To do this,
-    // we need to create a bit of shared memory that our gateway can use to track the current
-    // sequence number for messages coming from the gateway.
-    println!(
-        "Sending a heartbeat every {:#?} milliseconds",
-        &hello_message.heartbeat_interval
-    );
-
-    let seq_num = atomic::AtomicI64::new(0);
-    Heartbeat::from_atom(&seq_num).send(&mut ws);
-
-    HeartbeatAck::from_websocket(&mut ws);
+    return Some(GatewayConnection {
+        websocket: ws,
+        heartbeat_interval,
+        sequence_number: atomic::AtomicI64::new(0),
+    });
 }

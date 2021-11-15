@@ -14,3 +14,8 @@ pub struct User {
 pub struct Application {
     id: String,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct UnavailableGuild {
+    id: String
+}

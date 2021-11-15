@@ -9,8 +9,6 @@ fn main() -> io::Result<()> {
     let bot_config = api::config::load_config(config_file_path)?;
     let gateway_config = api::get_bot_gateway(&bot_config);
 
-    println!("#{:?}", &bot_config);
-    println!("#{:?}", &gateway_config);
     gateway::connect_to_gateway(bot_config, gateway_config);
 
 
