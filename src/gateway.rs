@@ -55,8 +55,8 @@ struct PrivateGatewayEvent<T> {
     pub d: T,
 }
 
-trait ForceRetrievableGatewayMessage<T: std::fmt::Debug + de::DeserializeOwned> {
-    fn force_from_websocket(ws: &mut GatewayWebSocket) -> T {
+trait ExpectableWebsocketMessage<T: std::fmt::Debug + de::DeserializeOwned> {
+    fn expect_from_websocket(ws: &mut GatewayWebSocket) -> T {
         let raw_message = ws.read_message().unwrap().to_string();
         let parsed_message: PrivateGatewayEvent<T> =
             serde_json::from_str(&raw_message).unwrap();
@@ -70,7 +70,7 @@ pub struct Hello {
     pub heartbeat_interval: i64,
 }
 
-impl ForceRetrievableGatewayMessage<Hello> for Hello {}
+impl ExpectableWebsocketMessage<Hello> for Hello {}
 
 #[derive(Deserialize, Debug)]
 pub struct Ready {
@@ -82,7 +82,7 @@ pub struct Ready {
     pub guilds: Vec<types::UnavailableGuild>,
 }
 
-impl ForceRetrievableGatewayMessage<Ready> for Ready {}
+impl ExpectableWebsocketMessage<Ready> for Ready {}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 /// Sending the IDENTIFY message to the gateway
@@ -157,8 +157,8 @@ pub struct HeartbeatAck {}
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 pub enum GatewayMessageData {
-    Hello(Hello),
     HeartbeatAck(HeartbeatAck),
+    GuildCreate(types::Guild),
 }
 
 #[derive(Debug, Deserialize)]
@@ -176,14 +176,30 @@ pub struct GatewayEvent {
     pub data: GatewayMessageData,
 }
 
+// And this is what we'll construct after connecting to the websocket
+#[derive(Debug)]
+pub struct GatewayConnection {
+    pub websocket: GatewayWebSocket,
+    pub sequence_number: atomic::AtomicI64,
+    pub heartbeat_interval: atomic::AtomicI64,
+}
+
+impl GatewayConnection {
+    pub fn read_event(&mut self) -> Option<GatewayEvent> {
+        GatewayEvent::from_gateway(self)
+    }
+}
+
+
 impl GatewayEvent {
-    pub fn from_websocket(ws: &mut GatewayWebSocket) -> Option<Self> {
-        let raw_message = ws.read_message().unwrap().to_string();
+    pub fn from_gateway(conn: &mut GatewayConnection) -> Option<Self> {
+        // TODO: This doesn't handle errors when reading from the websocket
+        let raw_message = conn.websocket.read_message().unwrap().to_string();
         let parsed_message = serde_json::from_str(&raw_message);
         match parsed_message {
             Ok(r) => return Some(r),
             _ => {
-                println!("Error deserializing gateway message: {:#?}", parsed_message);
+                println!("Error deserializing gateway message: {:#?}", raw_message);
                 return None;
             }
         };
@@ -193,24 +209,18 @@ impl GatewayEvent {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 /// Establishing a connection to the gateway
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-pub struct GatewayConnection {
-    pub websocket: GatewayWebSocket,
-    pub sequence_number: atomic::AtomicI64,
-    pub heartbeat_interval: atomic::AtomicI64,
-}
-
 pub fn connect_to_gateway(
     bot_config: api::config::BotConfig,
     gateway_config: api::GatewayBotResponse,
-) -> Option<GatewayConnection> {
+) -> GatewayConnection {
     // Create the initial connection to the websocket
     let gateway_url = Url::parse(&gateway_config.url).expect("Could not parse gatweay URL");
     let (mut ws, _response) = connect(gateway_url).expect("Can't connect");
 
-    // Once we've actually connected, we'll expect a series of events from the gateway in
-    // succession to correctly establish the connection. To do this, we'll force receive those
-    // events from the websocket. The order of operations, as specificed in the developer
-    // documentation is:
+    // Once we've actually established a raw connection connected, we'll expect a series of events
+    // from the gateway in succession to correctly establish a valid connection. To do this, we'll
+    // expect to receive those events from the websocket. The order of operations, as specificed in
+    // the developer documentation is:
     //
     // 1. We should expect a HELLO message from the gateway, which will inform us of the interval
     //    at which our client is expected to send heartbeats.
@@ -218,15 +228,13 @@ pub fn connect_to_gateway(
     //    connection properties information.
     // 3. Assuming the IDENTIFY message is valid, we should expect to receive a READY message, at
     //    which point we are considered 'connected' to the gateway.
-    let heartbeat_interval = atomic::AtomicI64::new(0);
-    let hello_message = Hello::force_from_websocket(&mut ws);
-    heartbeat_interval.store(hello_message.heartbeat_interval, atomic::Ordering::Relaxed);
+    let hello = Hello::expect_from_websocket(&mut ws);
     Identify::from_config(bot_config).send(&mut ws);
-    Ready::force_from_websocket(&mut ws);
+    Ready::expect_from_websocket(&mut ws);
 
-    return Some(GatewayConnection {
+    return GatewayConnection {
         websocket: ws,
-        heartbeat_interval,
+        heartbeat_interval: atomic::AtomicI64::new(hello.heartbeat_interval),
         sequence_number: atomic::AtomicI64::new(0),
-    });
+    };
 }

@@ -9,8 +9,19 @@ fn main() -> io::Result<()> {
     let bot_config = api::config::load_config(config_file_path)?;
     let gateway_config = api::get_bot_gateway(&bot_config);
 
-    gateway::connect_to_gateway(bot_config, gateway_config);
+    let mut connection = gateway::connect_to_gateway(bot_config, gateway_config);
+    println!("Established connection to the gateway: {:#?}", connection);
 
-
-    Ok(())
+    loop {
+        if let Some(next_message) = connection.read_event() {
+            match next_message.data {
+                gateway::GatewayMessageData::HeartbeatAck(_) => {
+                    println!("Received heartbeat HeartbeatAck");
+                }
+                gateway::GatewayMessageData::GuildCreate(guild) => {
+                    println!("Guild info: {:#?}", guild);
+                }
+            }
+        }
+    }
 }
