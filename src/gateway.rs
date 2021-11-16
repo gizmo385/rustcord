@@ -3,11 +3,12 @@ use crate::types;
 
 use std::env;
 use std::net::TcpStream;
-//use std::{thread, time};
+use std::{thread, time};
+use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
+use std::sync::Arc;
 use serde::de;
 use serde::{Deserialize, Serialize};
 use serde_json;
-use std::sync::atomic;
 
 use tungstenite::stream::MaybeTlsStream;
 use tungstenite::{connect, Message, WebSocket};
@@ -67,7 +68,7 @@ trait ExpectableWebsocketMessage<T: std::fmt::Debug + de::DeserializeOwned> {
 
 #[derive(Deserialize, Debug)]
 pub struct Hello {
-    pub heartbeat_interval: i64,
+    pub heartbeat_interval: u64,
 }
 
 impl ExpectableWebsocketMessage<Hello> for Hello {}
@@ -140,9 +141,9 @@ impl SendableGatewayMessage for Heartbeat {
 }
 
 impl Heartbeat {
-    pub fn from_atom(sequence_num: &atomic::AtomicI64) -> Self {
+    pub fn from_atom(sequence_num: &AtomicI64) -> Self {
         Heartbeat {
-            d: sequence_num.load(atomic::Ordering::Relaxed),
+            d: sequence_num.load(Ordering::Relaxed),
         }
     }
 }
@@ -159,6 +160,7 @@ pub struct HeartbeatAck {}
 pub enum GatewayMessageData {
     HeartbeatAck(HeartbeatAck),
     GuildCreate(types::Guild),
+    MessageCreate(types::Message),
 }
 
 #[derive(Debug, Deserialize)]
@@ -180,8 +182,8 @@ pub struct GatewayEvent {
 #[derive(Debug)]
 pub struct GatewayConnection {
     pub websocket: GatewayWebSocket,
-    pub sequence_number: atomic::AtomicI64,
-    pub heartbeat_interval: atomic::AtomicI64,
+    pub sequence_number: Arc<AtomicI64>,
+    pub heartbeat_interval: Arc<AtomicU64>,
 }
 
 impl GatewayConnection {
@@ -234,7 +236,24 @@ pub fn connect_to_gateway(
 
     return GatewayConnection {
         websocket: ws,
-        heartbeat_interval: atomic::AtomicI64::new(hello.heartbeat_interval),
-        sequence_number: atomic::AtomicI64::new(0),
+        heartbeat_interval: Arc::new(AtomicU64::new(hello.heartbeat_interval)),
+        sequence_number: Arc::new(AtomicI64::new(0)),
     };
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+/// Sending heartbeats
+////////////////////////////////////////////////////////////////////////////////////////////////////
+pub fn start_heartbeat_thread(connection: &mut GatewayConnection) -> thread::JoinHandle<()> {
+    let heartbeat_interval = connection.heartbeat_interval.clone();
+    let sequence_number = connection.sequence_number.clone();
+    println!("Starting heartbeat thread...");
+    return thread::spawn(move || {
+        loop {
+            let _hb = Heartbeat { d: sequence_number.load(Ordering::Relaxed) };
+            // TODO: Send the heartbeat
+            let sleep_time_ms = heartbeat_interval.load(Ordering::Relaxed);
+            thread::sleep(time::Duration::from_millis(sleep_time_ms));
+        }
+    });
 }
