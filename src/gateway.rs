@@ -1,14 +1,13 @@
 use crate::api;
 use crate::types;
 
-use std::env;
-use std::net::TcpStream;
-use std::{thread, time};
-use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
-use std::sync::Arc;
 use serde::de;
 use serde::{Deserialize, Serialize};
 use serde_json;
+use std::env;
+use std::net::TcpStream;
+use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::Arc;
 
 use tungstenite::stream::MaybeTlsStream;
 use tungstenite::{connect, Message, WebSocket};
@@ -59,8 +58,7 @@ struct PrivateGatewayEvent<T> {
 trait ExpectableWebsocketMessage<T: std::fmt::Debug + de::DeserializeOwned> {
     fn expect_from_websocket(ws: &mut GatewayWebSocket) -> T {
         let raw_message = ws.read_message().unwrap().to_string();
-        let parsed_message: PrivateGatewayEvent<T> =
-            serde_json::from_str(&raw_message).unwrap();
+        let parsed_message: PrivateGatewayEvent<T> = serde_json::from_str(&raw_message).unwrap();
         println!("Received message from gateway: {:#?}", parsed_message);
         return parsed_message.d;
     }
@@ -108,14 +106,14 @@ struct Identify {
 }
 
 impl Identify {
-    fn from_config(config: api::config::BotConfig) -> Self {
+    fn from_config(config: &api::config::BotConfig) -> Self {
         Identify {
-            token: config.token,
+            token: String::from(&config.token),
             intents: config.intents,
             properties: ConnectionProperties {
                 os: env::consts::OS.to_string(),
-                browser: "discord-rs".to_string(),
-                device: "discord-rs".to_string(),
+                browser: "rustcord".to_string(),
+                device: "rustcord".to_string(),
             },
         }
     }
@@ -183,7 +181,7 @@ pub struct GatewayEvent {
 pub struct GatewayConnection {
     pub websocket: GatewayWebSocket,
     pub sequence_number: Arc<AtomicI64>,
-    pub heartbeat_interval: Arc<AtomicU64>,
+    pub heartbeat_interval: u64,
 }
 
 impl GatewayConnection {
@@ -191,7 +189,6 @@ impl GatewayConnection {
         GatewayEvent::from_gateway(self)
     }
 }
-
 
 impl GatewayEvent {
     pub fn from_gateway(conn: &mut GatewayConnection) -> Option<Self> {
@@ -212,12 +209,12 @@ impl GatewayEvent {
 /// Establishing a connection to the gateway
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 pub fn connect_to_gateway(
-    bot_config: api::config::BotConfig,
-    gateway_config: api::GatewayBotResponse,
+    bot_config: &api::config::BotConfig,
+    gateway_config: api::misc::GatewayBotResponse,
 ) -> GatewayConnection {
     // Create the initial connection to the websocket
     let gateway_url = Url::parse(&gateway_config.url).expect("Could not parse gatweay URL");
-    let (mut ws, _response) = connect(gateway_url).expect("Can't connect");
+    let (mut websocket, _response) = connect(gateway_url).expect("Can't connect");
 
     // Once we've actually established a raw connection connected, we'll expect a series of events
     // from the gateway in succession to correctly establish a valid connection. To do this, we'll
@@ -230,30 +227,14 @@ pub fn connect_to_gateway(
     //    connection properties information.
     // 3. Assuming the IDENTIFY message is valid, we should expect to receive a READY message, at
     //    which point we are considered 'connected' to the gateway.
-    let hello = Hello::expect_from_websocket(&mut ws);
-    Identify::from_config(bot_config).send(&mut ws);
-    Ready::expect_from_websocket(&mut ws);
+    let hello = Hello::expect_from_websocket(&mut websocket);
+    Identify::from_config(bot_config).send(&mut websocket);
+    Ready::expect_from_websocket(&mut websocket);
 
-    return GatewayConnection {
-        websocket: ws,
-        heartbeat_interval: Arc::new(AtomicU64::new(hello.heartbeat_interval)),
+    // Create the gateway object
+    GatewayConnection {
+        websocket,
+        heartbeat_interval: hello.heartbeat_interval,
         sequence_number: Arc::new(AtomicI64::new(0)),
-    };
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-/// Sending heartbeats
-////////////////////////////////////////////////////////////////////////////////////////////////////
-pub fn start_heartbeat_thread(connection: &mut GatewayConnection) -> thread::JoinHandle<()> {
-    let heartbeat_interval = connection.heartbeat_interval.clone();
-    let sequence_number = connection.sequence_number.clone();
-    println!("Starting heartbeat thread...");
-    return thread::spawn(move || {
-        loop {
-            let _hb = Heartbeat { d: sequence_number.load(Ordering::Relaxed) };
-            // TODO: Send the heartbeat
-            let sleep_time_ms = heartbeat_interval.load(Ordering::Relaxed);
-            thread::sleep(time::Duration::from_millis(sleep_time_ms));
-        }
-    });
+    }
 }

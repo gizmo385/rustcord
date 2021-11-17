@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use serde_repr::Deserialize_repr;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct User {
@@ -52,7 +53,8 @@ pub struct Guild {
     pub mfa_level: i64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize_repr)]
+#[repr(i64)]
 pub enum ChannelType {
     GuildText = 0,
     DirectMessage = 1,
@@ -71,7 +73,7 @@ pub enum ChannelType {
 pub struct Channel {
     pub id: String,
     #[serde(rename(deserialize = "type"))]
-    pub channel_type: i64, // TODO: Figure out how to use ChannelType here
+    pub channel_type: ChannelType,
     pub guild_id: Option<String>,
     pub position: Option<i64>,
     pub name: Option<String>,
@@ -79,7 +81,8 @@ pub struct Channel {
     pub nsfw: Option<bool>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize_repr)]
+#[repr(i64)]
 pub enum MessageType {
     Default = 0,
     RecipientAdd = 1,
@@ -122,5 +125,5 @@ pub struct Message {
     pub application_id: Option<String>,
     pub flags: Option<i64>,
     #[serde(rename(deserialize = "type"))]
-    pub message_type: i64, // TODO: Figure out how to use MessageType here
+    pub message_type: MessageType,
 }

@@ -8,12 +8,13 @@ pub mod types;
 fn main() -> io::Result<()> {
     let config_file_path = fs::canonicalize("./config/config.json")?;
     let bot_config = api::config::load_config(config_file_path)?;
-    let gateway_config = api::get_bot_gateway(&bot_config);
+    let gateway_config = api::misc::get_bot_gateway(&bot_config);
 
-    let mut connection = gateway::connect_to_gateway(bot_config, gateway_config);
+    let mut connection = gateway::connect_to_gateway(&bot_config, gateway_config);
 
-    // Start the heartbeat thread
-    gateway::start_heartbeat_thread(&mut connection);
+    let channel_id = "861603596349079552".to_string();
+    let channel = api::channel::get_channel(&bot_config, channel_id);
+    println!("{:#?}", channel);
 
     loop {
         if let Some(next_message) = connection.read_event() {
