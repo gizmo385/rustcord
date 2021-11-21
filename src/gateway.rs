@@ -75,7 +75,7 @@ impl ExpectableWebsocketMessage<Hello> for Hello {}
 pub struct Ready {
     #[serde(rename(deserialize = "v"))]
     pub version: i32,
-    pub user: types::User,
+    pub user: api::user::User,
     pub session_id: String,
     pub application: types::Application,
     pub guilds: Vec<types::UnavailableGuild>,
@@ -158,7 +158,8 @@ pub struct HeartbeatAck {}
 pub enum GatewayMessageData {
     HeartbeatAck(HeartbeatAck),
     GuildCreate(types::Guild),
-    MessageCreate(types::Message),
+    MessageCreate(api::channel::Message),
+    InteractionCreate(types::Interaction),
 }
 
 #[derive(Debug, Deserialize)]
@@ -210,7 +211,7 @@ impl GatewayEvent {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 pub fn connect_to_gateway(
     bot_config: &api::config::BotConfig,
-    gateway_config: api::misc::GatewayBotResponse,
+    gateway_config: api::misc::BotGatewayInformation,
 ) -> GatewayConnection {
     // Create the initial connection to the websocket
     let gateway_url = Url::parse(&gateway_config.url).expect("Could not parse gatweay URL");

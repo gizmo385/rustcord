@@ -1,20 +1,9 @@
-use serde::{Deserialize, Serialize};
-use serde_repr::Deserialize_repr;
+use std::collections::HashMap;
 
-#[derive(Debug, Deserialize, Serialize)]
-pub struct User {
-    pub id: String,
-    pub username: String,
-    pub discriminator: String,
-    pub bot: Option<bool>,
-    pub system: Option<bool>,
-    pub mfa_enabled: Option<bool>,
-    pub verified: Option<bool>,
-    pub locale: Option<String>,
-    pub public_flags: Option<i64>,
-    pub premium_type: Option<i64>,
-    pub flags: Option<i64>,
-}
+use crate::api;
+
+use serde::Deserialize;
+use serde_repr::Deserialize_repr;
 
 #[derive(Debug, Deserialize)]
 pub struct Application {
@@ -53,77 +42,73 @@ pub struct Guild {
     pub mfa_level: i64,
 }
 
-#[derive(Debug, Deserialize_repr)]
-#[repr(i64)]
-pub enum ChannelType {
-    GuildText = 0,
-    DirectMessage = 1,
-    GuildVoice = 2,
-    GroupDirectMessage = 3,
-    GuildCategory = 4,
-    GuildNews = 5,
-    GuildStore = 6,
-    GuildNewsThread = 10,
-    GuildPublicThread = 11,
-    GuildPrivateThread = 12,
-    GuildStageVoice = 13,
+#[derive(Debug, Deserialize)]
+pub struct GuildMember {
+    pub user: Option<api::user::User>,
+    pub nick: Option<String>,
+    pub avatar: Option<String>,
+    #[serde(rename(deserialize="roles"))]
+    pub role_ids: Vec<String>,
+    pub joined_at: String,
+    pub premium_since: Option<String>,
+    pub deaf: bool,
+    pub mute: bool,
+    pub pending: Option<bool>,
+    pub permissions: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct Channel {
+pub struct ResolvedCommandData {
+    pub users: Option<HashMap<String, api::user::User>>,
+    pub members: Option<HashMap<String, GuildMember>>,
+    pub roles: Option<HashMap<String, Role>>,
+    pub channels: Option<HashMap<String, api::channel::Channel>>,
+    pub messages: Option<HashMap<String, api::channel::Message>>,
+}
+
+#[derive(Debug, Deserialize)]
+pub enum ApplicationCommandType {
+    ChatInput = 1,
+    User = 2,
+    Message = 3
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ApplicationCommandData {
     pub id: String,
+    pub name: String,
+    pub resolved: Option<ResolvedCommandData>,
     #[serde(rename(deserialize = "type"))]
-    pub channel_type: ChannelType,
-    pub guild_id: Option<String>,
-    pub position: Option<i64>,
-    pub name: Option<String>,
-    pub topic: Option<String>,
-    pub nsfw: Option<bool>,
+    pub command_type: ApplicationCommandType,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct InteractionData {
+    pub id: String,
+    pub name: String,
 }
 
 #[derive(Debug, Deserialize_repr)]
 #[repr(i64)]
-pub enum MessageType {
-    Default = 0,
-    RecipientAdd = 1,
-    RecipientRemove = 2,
-    Call = 3,
-    ChannelNameChange = 4,
-    ChannelIconChange = 5,
-    ChannelPinnedMessage = 6,
-    GuildMemberJoin = 7,
-    UserPremiumGuildSubscription = 8,
-    UserPremiumGuildSubscriptionTier1 = 9,
-    UserPremiumGuildSubscriptionTier2 = 10,
-    UserPremiumGuildSubscriptionTier3 = 11,
-    ChannelFollowAdd = 12,
-    GuildDiscoveryDisqualified = 14,
-    GuildDiscoveryRequalified = 15,
-    GuildDiscoveryGracePeriodInitialWarning = 16,
-    GuildDiscoveryGracePeriodFinalWarning = 17,
-    ThreadCreated = 18,
-    Reply = 19,
-    ChatInputCommand = 20,
-    ThreadStarterMessage = 21,
-    GuildInviteReminder = 22,
-    ContextMenuCommand = 23,
+pub enum InteractionType {
+    Ping = 1,
+    ApplicationCommand = 2,
+    MessageComponent = 3,
+    ApplicationCommandAutocomplete = 4
 }
 
 #[derive(Debug, Deserialize)]
-pub struct Message {
+pub struct Interaction {
     pub id: String,
-    pub author: User,
-    pub channel_id: String,
+    pub application_id: String,
     pub guild_id: Option<String>,
-    pub content: String,
-    pub timestamp: String,
-    pub edited_timestamp: Option<String>,
-    pub tts: bool,
-    pub mention_everyone: bool,
-    pub mention_roles: Vec<String>,
-    pub application: Option<Application>,
-    pub application_id: Option<String>,
-    pub flags: Option<i64>,
+    pub channel_id: Option<String>,
+    pub member: Option<GuildMember>,
+    pub user: Option<api::user::User>,
+    pub token: String,
+    pub version: i64,
+    pub message: Option<api::channel::Message>,
+    pub data: InteractionData,
     #[serde(rename(deserialize = "type"))]
-    pub message_type: MessageType,
+    pub interaction_type: InteractionType,
 }
