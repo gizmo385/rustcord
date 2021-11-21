@@ -1,5 +1,4 @@
 use crate::api;
-use crate::types;
 
 use serde::de;
 use serde::{Deserialize, Serialize};
@@ -77,8 +76,8 @@ pub struct Ready {
     pub version: i32,
     pub user: api::user::User,
     pub session_id: String,
-    pub application: types::Application,
-    pub guilds: Vec<types::UnavailableGuild>,
+    pub application: api::misc::Application,
+    pub guilds: Vec<api::guild::UnavailableGuild>,
 }
 
 impl ExpectableWebsocketMessage<Ready> for Ready {}
@@ -157,9 +156,9 @@ pub struct HeartbeatAck {}
 #[serde(untagged)]
 pub enum GatewayMessageData {
     HeartbeatAck(HeartbeatAck),
-    GuildCreate(types::Guild),
+    GuildCreate(api::guild::Guild),
     MessageCreate(api::channel::Message),
-    InteractionCreate(types::Interaction),
+    InteractionCreate(api::interaction::Interaction),
 }
 
 #[derive(Debug, Deserialize)]

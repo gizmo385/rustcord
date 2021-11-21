@@ -3,7 +3,6 @@ use std::{fs, io};
 
 pub mod api;
 pub mod gateway;
-pub mod types;
 
 fn listen_for_messages(connection: &mut gateway::GatewayConnection) -> () {
     loop {
