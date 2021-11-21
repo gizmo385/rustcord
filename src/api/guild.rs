@@ -3,12 +3,12 @@ use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 pub struct UnavailableGuild {
-    pub id: String
+    pub id: api::misc::Snowflake
 }
 
 #[derive(Debug, Deserialize)]
 pub struct Role {
-    pub id: String,
+    pub id: api::misc::Snowflake,
     pub name: String,
     pub color: i64,
     pub hoist: bool,
@@ -21,7 +21,7 @@ pub struct Role {
 
 #[derive(Debug, Deserialize)]
 pub struct Guild {
-    pub id: String,
+    pub id: api::misc::Snowflake,
     pub name: String,
     pub permissions: Option<String>,
     pub icon: Option<String>,
@@ -39,7 +39,7 @@ pub struct GuildMember {
     pub nick: Option<String>,
     pub avatar: Option<String>,
     #[serde(rename(deserialize="roles"))]
-    pub role_ids: Vec<String>,
+    pub role_ids: Vec<api::misc::Snowflake>,
     pub joined_at: String,
     pub premium_since: Option<String>,
     pub deaf: bool,
@@ -50,7 +50,7 @@ pub struct GuildMember {
 
 
 impl Guild {
-    pub fn get(config: &api::config::BotConfig, guild_id: String) -> Self {
+    pub fn get(config: &api::config::BotConfig, guild_id: api::misc::Snowflake) -> Self {
         api::base::get(config, format!("guilds/{}", guild_id))
     }
 
@@ -58,7 +58,7 @@ impl Guild {
         api::base::get(config, format!("guilds/{}/members", self.id))
     }
 
-    pub fn member(&self, config: &api::config::BotConfig, user_id: String) -> Option<GuildMember> {
+    pub fn member(&self, config: &api::config::BotConfig, user_id: api::misc::Snowflake) -> Option<GuildMember> {
         api::base::get(config, format!("guilds/{}/members/{}", self.id, user_id))
     }
 

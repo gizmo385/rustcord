@@ -210,7 +210,7 @@ impl GatewayEvent {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 pub fn connect_to_gateway(
     bot_config: &api::config::BotConfig,
-    gateway_config: api::misc::BotGatewayInformation,
+    gateway_config: api::misc::BotGateway,
 ) -> GatewayConnection {
     // Create the initial connection to the websocket
     let gateway_url = Url::parse(&gateway_config.url).expect("Could not parse gatweay URL");

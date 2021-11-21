@@ -32,7 +32,7 @@ pub enum PremiumType {
 
 #[derive(Debug, Deserialize)]
 pub struct User {
-    pub id: String,
+    pub id: api::misc::Snowflake,
     pub username: String,
     pub discriminator: String,
     pub bot: Option<bool>,

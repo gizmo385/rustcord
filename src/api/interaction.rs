@@ -46,11 +46,19 @@ pub enum InteractionType {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub enum InteractionInvoker {
+    Guild(api::guild::GuildMember),
+    DirectMessage(api::user::User),
+}
+
+#[derive(Debug, Deserialize)]
 pub struct Interaction {
     pub id: String,
     pub application_id: String,
     pub guild_id: Option<String>,
     pub channel_id: Option<String>,
+    pub invoked_by: InteractionInvoker,
     pub member: Option<api::guild::GuildMember>,
     pub user: Option<api::user::User>,
     pub token: String,

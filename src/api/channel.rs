@@ -61,7 +61,7 @@ pub enum MessageType {
 
 #[derive(Debug, Deserialize)]
 pub struct Message {
-    pub id: String,
+    pub id: api::misc::Snowflake,
     pub author: api::user::User,
     pub channel_id: String,
     pub guild_id: Option<String>,
@@ -72,7 +72,7 @@ pub struct Message {
     pub mention_everyone: bool,
     pub mention_roles: Vec<String>,
     pub application: Option<api::misc::Application>,
-    pub application_id: Option<String>,
+    pub application_id: Option<api::misc::Snowflake>,
     pub flags: Option<i64>,
     #[serde(rename(deserialize = "type"))]
     pub message_type: MessageType,
@@ -110,7 +110,7 @@ impl SendMessageBuilder {
 }
 
 impl Channel {
-    pub fn get(config: &api::config::BotConfig, channel_id: String) -> Self {
+    pub fn get(config: &api::config::BotConfig, channel_id: api::misc::Snowflake) -> Self {
         api::base::get(config, format!("channels/{}", channel_id))
     }
 

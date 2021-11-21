@@ -40,7 +40,8 @@ fn listen_for_messages(connection: &mut gateway::GatewayConnection) -> () {
 fn main() -> io::Result<()> {
     let config_file_path = fs::canonicalize("./config/config.json")?;
     let bot_config = api::config::load_config(config_file_path)?;
-    let gateway_config = api::misc::BotGatewayInformation::get(&bot_config);
+    let gateway_config = api::misc::BotGateway::get(&bot_config);
+
     let mut connection = gateway::connect_to_gateway(&bot_config, gateway_config);
     listen_for_messages(&mut connection);
 
