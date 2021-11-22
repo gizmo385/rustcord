@@ -58,7 +58,6 @@ trait ExpectableWebsocketMessage<T: std::fmt::Debug + de::DeserializeOwned> {
     fn expect_from_websocket(ws: &mut GatewayWebSocket) -> T {
         let raw_message = ws.read_message().unwrap().to_string();
         let parsed_message: PrivateGatewayEvent<T> = serde_json::from_str(&raw_message).unwrap();
-        println!("Received message from gateway: {:#?}", parsed_message);
         return parsed_message.d;
     }
 }
@@ -158,6 +157,7 @@ pub enum GatewayMessageData {
     HeartbeatAck(HeartbeatAck),
     GuildCreate(api::guild::Guild),
     MessageCreate(api::channel::Message),
+    GuildMemberUpdate(api::guild::GuildMemberUpdate),
     InteractionCreate(api::interaction::Interaction),
 }
 

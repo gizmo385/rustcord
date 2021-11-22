@@ -107,6 +107,10 @@ impl SendMessageBuilder {
     pub fn send_to(&self, config: &api::config::BotConfig, channel: &Channel) -> Message {
         api::base::post(config, format!("channels/{}/messages", channel.id), self)
     }
+
+    pub fn text(message: String) -> Self {
+        Self::new(SendMessageContent::TextMessage(message))
+    }
 }
 
 impl Channel {

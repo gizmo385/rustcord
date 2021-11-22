@@ -1,7 +1,7 @@
 use crate::api;
 use serde::{Deserialize, Serialize};
 use serde::de;
-use std::{fmt, ops::{Deref, DerefMut}};
+use std::{fmt, hash::Hash, ops::{Deref, DerefMut}};
 
 /// [Snowflakes](https://discord.com/developers/docs/reference#snowflakes) are a data type that
 /// Discord leverages for unique identifiers. Alongside being a unique identifier, they also have
@@ -10,7 +10,7 @@ use std::{fmt, ops::{Deref, DerefMut}};
 /// - The internal ID of the worker that generated it.
 /// - The internal ID of the process that generated it.
 /// - And an internal incrementing ID.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Hash, PartialEq, Eq)]
 pub struct Snowflake(u64);
 
 impl Deref for Snowflake {

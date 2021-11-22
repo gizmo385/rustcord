@@ -18,19 +18,22 @@ fn listen_for_messages(connection: &mut gateway::GatewayConnection) -> () {
             // Handle the message data
             match next_message.data {
                 gateway::GatewayMessageData::HeartbeatAck(_) => {
-                    println!("Received heartbeat HeartbeatAck");
+                    println!("Received HeartbeatAck");
                 }
                 gateway::GatewayMessageData::GuildCreate(guild) => {
-                    println!("Guild info: {:#?}", guild);
+                    println!("Guild info for guild {}", guild.name);
                 }
                 gateway::GatewayMessageData::MessageCreate(message) => {
-                    println!(
-                        "Message created by {:#?}: {:#?}",
-                        message.author.username, message
-                    );
+                    println!("Message created by {:#?}", message.author.username);
                 }
                 gateway::GatewayMessageData::InteractionCreate(interaction) => {
                     println!("Received interaction: {:#?}", interaction)
+                }
+                gateway::GatewayMessageData::GuildMemberUpdate(update) => {
+                    println!(
+                        "Update for guild member `{}` in guild `{}`",
+                        update.user.username, update.guild_id
+                    );
                 }
             }
         }
@@ -40,8 +43,8 @@ fn listen_for_messages(connection: &mut gateway::GatewayConnection) -> () {
 fn main() -> io::Result<()> {
     let config_file_path = fs::canonicalize("./config/config.json")?;
     let bot_config = api::config::load_config(config_file_path)?;
-    let gateway_config = api::misc::BotGateway::get(&bot_config);
 
+    let gateway_config = api::misc::BotGateway::get(&bot_config);
     let mut connection = gateway::connect_to_gateway(&bot_config, gateway_config);
     listen_for_messages(&mut connection);
 
