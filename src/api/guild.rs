@@ -31,6 +31,7 @@ pub struct Guild {
     pub afk_timeout: i64,
     pub verification_level: i64,
     pub mfa_level: i64,
+    pub channels: Option<Vec<api::channel::Channel>>,
 }
 
 #[derive(Debug, Deserialize)]
